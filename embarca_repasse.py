@@ -140,38 +140,6 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     embarca['Nº do Sistema'] = embarca['Nº do Sistema'].astype(str).str.split('.').str[0]
     embarca['ID Transacao'] = embarca['ID Transacao'].astype(str).str.split('.').str[0]
 
-    ## ajustando forma de pagamento conforme a venda
-
-    df_embarca_vendas2 = df_embarca_vendas.copy()
-    df_embarca_vendas2.drop(columns=['Status'], inplace=True)
-
-    df_embarca_vendas2.rename(columns={
-        'Operadora': 'Nome da Empresa',
-        'ID do Bilhete': 'ID Transacao',
-        'Metodo de pagamento': 'Metodo de Pagamento_V',
-        'parcelas': 'Parcelas da Venda'
-    }, inplace=True)
-
-    embarca['Nome da Empresa'] = embarca['Nome da Empresa'].astype(str)
-
-    df_embarca_vendas2['Data da Venda'] = pd.to_datetime(df_embarca_vendas2['Data da Venda'], errors='coerce')
-    if df_embarca_vendas2['Data da Venda'].dt.tz is not None:
-        df_embarca_vendas2['Data da Venda'] = df_embarca_vendas2['Data da Venda'].dt.tz_localize(None)
-    df_embarca_vendas2['Data da Venda'] = df_embarca_vendas2['Data da Venda'].dt.normalize()
-
-    df_embarca_vendas2['Nome da Empresa'] = df_embarca_vendas2['Nome da Empresa'].astype(str)
-
-    embarca = agrupamento_merge(
-        embarca,
-        df_embarca_vendas2,
-        ['Nome da Empresa', 'ID Transacao', 'Data da Compra'],
-        ['Nome da Empresa', 'ID Transacao', 'Data da Venda'],
-        'left'
-    )
-    embarca['Metodo de Pagamento_V'] = embarca['Metodo de Pagamento_V'].fillna(embarca['Forma de pagamento'])
-    embarca['Venda Localizada'] = np.where(embarca['Parcelas da Venda'].isna(), 'NAO', 'SIM')
-    embarca['Parcelas da Venda'] = embarca['Parcelas da Venda'].fillna(1)
-
     ## agrupando com planilha do totalbus para trazer a data BPE
     
     df_totalbus_conciliador = df_totalbus.copy()
@@ -201,8 +169,47 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     embarca.rename(columns={'DATA HORA VENDA PARA CANC.': 'Data BPE'}, inplace=True)
     embarca['Data BPE'] = embarca['Data BPE'].fillna(embarca['Data da Compra'])
 
+    ## ajustando forma de pagamento conforme a venda
+
+    df_embarca_vendas2 = df_embarca_vendas.copy()
+    df_embarca_vendas2.drop(columns=['Status'], inplace=True)
+
+    df_embarca_vendas2.rename(columns={
+        'Operadora': 'Nome da Empresa',
+        'ID do Bilhete': 'ID Transacao',
+        'Metodo de pagamento': 'Metodo de Pagamento_V',
+        'parcelas': 'Parcelas da Venda'
+    }, inplace=True)
+
+    embarca['Nome da Empresa'] = embarca['Nome da Empresa'].astype(str)
+
+    df_embarca_vendas2['Data da Venda'] = pd.to_datetime(df_embarca_vendas2['Data da Venda'], errors='coerce')
+    if df_embarca_vendas2['Data da Venda'].dt.tz is not None:
+        df_embarca_vendas2['Data da Venda'] = df_embarca_vendas2['Data da Venda'].dt.tz_localize(None)
+    df_embarca_vendas2['Data da Venda'] = df_embarca_vendas2['Data da Venda'].dt.normalize()
+
+    df_embarca_vendas2['Nome da Empresa'] = df_embarca_vendas2['Nome da Empresa'].astype(str)
+
+    embarca.sort_values('Data da Compra')
+    df_embarca_vendas2.sort_values('Data da Venda')
+
+    embarca = pd.merge_asof(
+        embarca,
+        df_embarca_vendas2,
+        left_on= 'Data da Compra',
+        right_on= 'Data da Venda',
+        left_by= ['Nome da Empresa', 'ID Transacao'],
+        right_by= ['NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'],
+        direction= 'nearest',
+        tolerance= pd.Timedelta('1 day')
+    )
+
+    embarca['Metodo de Pagamento_V'] = embarca['Metodo de Pagamento_V'].fillna(embarca['Forma de pagamento'])
+    embarca['Venda Localizada'] = np.where(embarca['Parcelas da Venda'].isna(), 'NAO', 'SIM')
+    embarca['Parcelas da Venda'] = embarca['Parcelas da Venda'].fillna(1)
+
     ## definindo data de lancamento
-    
+
     embarca['Status'] = embarca['Status'].astype(str).str.upper()
 
     condicional_dt_lancamento = [
