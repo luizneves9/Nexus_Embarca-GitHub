@@ -76,10 +76,10 @@ def processando_projecao(df_totalbus):
     resultado_projecao_data = [
         df_projetado['DATA HORA VENDA'] + timedelta(days=1),
         df_projetado['DATA HORA VENDA'] + (timedelta(days=30) * df_projetado['PARCELA_ATUAL']) + timedelta(days=1),
-        df_projetado['Data da Venda'] + timedelta(days=1),
-        df_projetado['Data da Venda'] + (timedelta(days=30) * df_projetado['PARCELA_ATUAL']) + timedelta(days=1),
-        df_projetado['Data da Venda'] + timedelta(days=1),
-        df_projetado['Data da Venda'] + (timedelta(days=30) * df_projetado['PARCELA_ATUAL']) + timedelta(days=1)
+        df_projetado['DATA HORA VENDA PARA CANC.'] + timedelta(days=1),
+        df_projetado['DATA HORA VENDA PARA CANC.'] + (timedelta(days=30) * df_projetado['PARCELA_ATUAL']) + timedelta(days=1),
+        df_projetado['DATA HORA VENDA PARA CANC.'] + timedelta(days=1),
+        df_projetado['DATA HORA VENDA PARA CANC.'] + (timedelta(days=30) * df_projetado['PARCELA_ATUAL']) + timedelta(days=1)
     ]
 
     df_projetado['DATA_PROJECAO'] = np.select(condicoes_projecao_data, resultado_projecao_data, pd.NaT)
