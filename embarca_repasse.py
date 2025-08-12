@@ -266,10 +266,6 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     embarca.rename(columns={'DATA HORA VENDA PARA CANC.': 'Data BPE'}, inplace=True)
     embarca['Data BPE'] = embarca['Data BPE'].fillna(embarca['Data da Compra'])
 
-    ## dropando colunas desnecessárias
-
-    embarca.drop(columns=['MesAno_Venda', 'MesAno_Cancelado', 'Cancelamento_Mesmo_Mes', 'NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'], inplace=True)
-
     ## tratando parcela_atual e projetando suas datas de pagamento
 
     condicional_projecao = [
@@ -418,6 +414,10 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         embarca['Data BPE'],
         embarca['Data do Cancelamento']
     )
+
+    ## dropando colunas desnecessárias
+
+    embarca.drop(columns=['MesAno_Venda', 'MesAno_Cancelado', 'Cancelamento_Mesmo_Mes', 'NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'], inplace=True)
 
     ## definindo tipos das colunas
 
