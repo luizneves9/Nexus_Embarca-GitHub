@@ -1,0 +1,9 @@
+# ignorando as pastas abaixo
+Banco/
+Relatorio Final/
+Totalbus/
+Manutenção Loja Virtual/
+Embarca_Vendas/
+Embarca_Repasse/
+Chargeback/
+__pycache__/
