@@ -199,7 +199,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         left_on= 'Data da Compra',
         right_on= 'Data da Venda',
         left_by= ['Nome da Empresa', 'ID Transacao'],
-        right_by= ['NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'],
+        right_by= ['Nome da Empresa', 'ID Transacao'],
         direction= 'nearest',
         tolerance= pd.Timedelta('1 day')
     )
