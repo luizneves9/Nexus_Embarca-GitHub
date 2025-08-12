@@ -172,6 +172,62 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     embarca['Venda Localizada'] = np.where(embarca['Parcelas da Venda'].isna(), 'NAO', 'SIM')
     embarca['Parcelas da Venda'] = embarca['Parcelas da Venda'].fillna(1)
 
+    ## agrupando com planilha do totalbus para trazer a data BPE
+    
+    df_totalbus_conciliador = df_totalbus.copy()
+
+    embarca['Data da Compra'] = pd.to_datetime(embarca['Data da Compra'], errors='coerce')
+    embarca['ID Transacao'] = embarca['ID Transacao'].astype(str)
+    df_totalbus_conciliador['DATA HORA VENDA PARA CANC.'] = pd.to_datetime(df_totalbus_conciliador['DATA HORA VENDA PARA CANC.'], errors='coerce')
+    df_totalbus_conciliador['ID TRANSACAO ORIGINAL'] = df_totalbus_conciliador['ID TRANSACAO ORIGINAL'].astype(str)
+
+    df_totalbus_conciliador = df_totalbus_conciliador[df_totalbus_conciliador['STATUS BILHETE'] == 'V']
+    df_totalbus_conciliador = df_totalbus_conciliador[['NOME_EMPRESA', 'DATA HORA VENDA PARA CANC.', 'ID TRANSACAO ORIGINAL']]
+
+    df_totalbus_conciliador = df_totalbus_conciliador.sort_values(by='DATA HORA VENDA PARA CANC.')
+    embarca = embarca.sort_values(by='Data da Compra')
+
+    embarca = pd.merge_asof(
+        embarca,
+        df_totalbus_conciliador,
+        left_on= 'Data da Compra',
+        right_on= 'DATA HORA VENDA PARA CANC.',
+        left_by= ['Nome da Empresa', 'ID Transacao'],
+        right_by= ['NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'],
+        direction= 'nearest',
+        tolerance= pd.Timedelta('1 day')
+    )
+
+    embarca.rename(columns={'DATA HORA VENDA PARA CANC.': 'Data BPE'}, inplace=True)
+    embarca['Data BPE'] = embarca['Data BPE'].fillna(embarca['Data da Compra'])
+
+    ## definindo data de lancamento
+    
+    embarca['Status'] = embarca['Status'].astype(str).str.upper()
+
+    condicional_dt_lancamento = [
+        (embarca['Status'] == 'APROVADO'),
+        (embarca['Status'] == 'CANCELADO') | (embarca['Status'] == 'CANCELADO Q')
+    ]
+
+    resultado_dt_lancamento = [
+        embarca['Data BPE'],
+        embarca['Data do Cancelamento']
+    ]
+
+    embarca['Data de Lancamento'] = np.select(condicional_dt_lancamento, resultado_dt_lancamento, pd.NaT)
+
+    ## tratando colunas
+    embarca['Nome do passageiro'] = embarca['Nome do passageiro'].str.replace('\n', '', regex=False).str.strip()
+    embarca['Marketing Digital'] = embarca['Marketing Digital'].fillna(0)
+    embarca['Forma de pagamento'] = embarca['Forma de pagamento'].astype(str).str.upper()
+    embarca['Metodo de Pagamento_V'] = embarca['Metodo de Pagamento_V'].astype(str).str.upper()
+    embarca['Parcela_Atual'] = embarca['Parcela_Atual'].fillna(-1).astype(int)
+
+    embarca['Taxa de Conv. (%)'] = embarca['Taxa de conveniência'] / embarca['Valor Total']
+    embarca['Percentual de Comissao'] = embarca['Comissão'] / (embarca['Valor Total'] + embarca['Taxa de conveniência'])
+    embarca['Total da Venda'] = embarca['Valor Total'] + embarca['Taxa de conveniência']
+
     ## ajustando sequencial das transações (será utilizado posteriormente para cálcular a data de projeção correta)
     
     condicao_parcela_referente = [
@@ -187,20 +243,8 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     ]
     
     embarca['Tipo'] = np.select(condicao_parcela_referente, resultado_tipo, 'Automatico')
-    embarca['Sequencial'] = embarca.groupby(['Nome da Empresa', 'ID Transacao', 'Data da Compra', 'Status', 'Tipo']).cumcount() + 1
+    embarca['Sequencial'] = embarca.groupby(['Nome da Empresa', 'ID Transacao', 'Data de Lancamento', 'Status', 'Tipo']).cumcount() + 1
     embarca['Parcela Referente'] = np.select(condicao_parcela_referente, resultado_parcela_referente, np.minimum(embarca['Sequencial'], embarca['Parcelas da Venda'])).astype(int)
-
-    ## tratando colunas
-    embarca['Nome do passageiro'] = embarca['Nome do passageiro'].str.replace('\n', '', regex=False).str.strip()
-    embarca['Marketing Digital'] = embarca['Marketing Digital'].fillna(0)
-    embarca['Forma de pagamento'] = embarca['Forma de pagamento'].astype(str).str.upper()
-    embarca['Metodo de Pagamento_V'] = embarca['Metodo de Pagamento_V'].astype(str).str.upper()
-    embarca['Status'] = embarca['Status'].astype(str).str.upper()
-    embarca['Parcela_Atual'] = embarca['Parcela_Atual'].fillna(-1).astype(int)
-
-    embarca['Taxa de Conv. (%)'] = embarca['Taxa de conveniência'] / embarca['Valor Total']
-    embarca['Percentual de Comissao'] = embarca['Comissão'] / (embarca['Valor Total'] + embarca['Taxa de conveniência'])
-    embarca['Total da Venda'] = embarca['Valor Total'] + embarca['Taxa de conveniência']
 
     ## incluindo a coluna Repasse_liquido
 
@@ -236,35 +280,6 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     condicional_mes_cancelamento = [embarca['MesAno_Venda'] == embarca['MesAno_Cancelado']]
     resultado_mes_cancelamento = [1]
     embarca['Cancelamento_Mesmo_Mes'] = np.select(condicional_mes_cancelamento, resultado_mes_cancelamento, 0)
-
-    ## agrupando com planilha do totalbus para trazer a data BPE
-    
-    df_totalbus_conciliador = df_totalbus.copy()
-
-    embarca['Data da Compra'] = pd.to_datetime(embarca['Data da Compra'], errors='coerce')
-    embarca['ID Transacao'] = embarca['ID Transacao'].astype(str)
-    df_totalbus_conciliador['DATA HORA VENDA PARA CANC.'] = pd.to_datetime(df_totalbus_conciliador['DATA HORA VENDA PARA CANC.'], errors='coerce')
-    df_totalbus_conciliador['ID TRANSACAO ORIGINAL'] = df_totalbus_conciliador['ID TRANSACAO ORIGINAL'].astype(str)
-
-    df_totalbus_conciliador = df_totalbus_conciliador[df_totalbus_conciliador['STATUS BILHETE'] == 'V']
-    df_totalbus_conciliador = df_totalbus_conciliador[['NOME_EMPRESA', 'DATA HORA VENDA PARA CANC.', 'ID TRANSACAO ORIGINAL']]
-
-    df_totalbus_conciliador = df_totalbus_conciliador.sort_values(by='DATA HORA VENDA PARA CANC.')
-    embarca = embarca.sort_values(by='Data da Compra')
-
-    embarca = pd.merge_asof(
-        embarca,
-        df_totalbus_conciliador,
-        left_on= 'Data da Compra',
-        right_on= 'DATA HORA VENDA PARA CANC.',
-        left_by= ['Nome da Empresa', 'ID Transacao'],
-        right_by= ['NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'],
-        direction= 'nearest',
-        tolerance= pd.Timedelta('1 day')
-    )
-
-    embarca.rename(columns={'DATA HORA VENDA PARA CANC.': 'Data BPE'}, inplace=True)
-    embarca['Data BPE'] = embarca['Data BPE'].fillna(embarca['Data da Compra'])
 
     ## tratando parcela_atual e projetando suas datas de pagamento
 
@@ -406,14 +421,6 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     ]
 
     embarca['Data_Projecao'] = np.select(condicional_dt_util, resultado_dt_util, embarca['Data_Projecao'])
-
-    ## definindo data de lancamento
-
-    embarca['Data de Lancamento'] = np.where(
-        embarca['Status'] == 'APROVADO',
-        embarca['Data BPE'],
-        embarca['Data do Cancelamento']
-    )
 
     ## dropando colunas desnecessárias
 
