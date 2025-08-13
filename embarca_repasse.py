@@ -292,17 +292,17 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
 
     condicional_projecao = [
     
-        ## ----- REGISTROS ANTES DE 01/01/2025 -----
+        ## ----- REGISTROS ANTES DE 01/10/2024 -----
     
         ## vendas com forma de pagamento pix
         (embarca['Status'] == 'APROVADO') &
         (embarca['Metodo de Pagamento_V'] == 'PIX') &
-        (embarca['Data BPE'] < '2025-01-01'),
+        (embarca['Data BPE'] < '2024-10-01'),
 
         ## vendas com forma de pagamento credit_card
         (embarca['Status'] == 'APROVADO') &
         (embarca['Metodo de Pagamento_V'] == 'CREDIT_CARD') &
-        (embarca['Data BPE'] < '2025-01-01'),
+        (embarca['Data BPE'] < '2024-10-01'),
 
         ## cancelamentos com forma de pagamento pix realizados no mesmo mês da venda
         (
@@ -311,7 +311,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'PIX') &
         (embarca['Cancelamento_Mesmo_Mes'] == 1) &
-        (embarca['Data do Cancelamento'] < '2025-01-01'),
+        (embarca['Data do Cancelamento'] < '2024-10-01'),
 
         ## cancelamentos com forma de pagamento credit_card realizados no mesmo mês da venda
         (
@@ -320,7 +320,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'CREDIT_CARD') &
         (embarca['Cancelamento_Mesmo_Mes'] == 1) &
-        (embarca['Data do Cancelamento'] < '2025-01-01'),
+        (embarca['Data do Cancelamento'] < '2024-10-01'),
 
         ## cancelamentos com forma de pagamento pix realizados no mês diferente ao da venda
         (
@@ -329,7 +329,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'PIX') &
         (embarca['Cancelamento_Mesmo_Mes'] == 0) &
-        (embarca['Data do Cancelamento'] < '2025-01-01'),
+        (embarca['Data do Cancelamento'] < '2024-10-01'),
 
         ## cancelamentos com forma de pagamento credit_card realizados no mês diferente ao da venda
         (
@@ -338,19 +338,19 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'CREDIT_CARD') &
         (embarca['Cancelamento_Mesmo_Mes'] == 0) & 
-        (embarca['Data do Cancelamento'] < '2025-01-01'),
+        (embarca['Data do Cancelamento'] < '2024-10-01'),
         
-        ## ----- REGISTROS DEPOIS DE 01/01/2025 -----
+        ## ----- REGISTROS DEPOIS DE 01/10/2024 -----
         
         ## vendas com forma de pagamento pix
         (embarca['Status'] == 'APROVADO') &
         (embarca['Metodo de Pagamento_V'] == 'PIX') &
-        (embarca['Data BPE'] >= '2025-01-01'),
+        (embarca['Data BPE'] >= '2024-10-01'),
 
         ## vendas com forma de pagamento credit_card
         (embarca['Status'] == 'APROVADO') &
         (embarca['Metodo de Pagamento_V'] == 'CREDIT_CARD') &
-        (embarca['Data BPE'] >= '2025-01-01'),
+        (embarca['Data BPE'] >= '2024-10-01'),
 
         ## cancelamentos com forma de pagamento pix realizados no mesmo mês da venda
         (
@@ -359,7 +359,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'PIX') &
         (embarca['Cancelamento_Mesmo_Mes'] == 1) &
-        (embarca['Data do Cancelamento'] >= '2025-01-01'),
+        (embarca['Data do Cancelamento'] >= '2024-10-01'),
 
         ## cancelamentos com forma de pagamento credit_card realizados no mesmo mês da venda
         (
@@ -368,7 +368,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'CREDIT_CARD') &
         (embarca['Cancelamento_Mesmo_Mes'] == 1) &
-        (embarca['Data do Cancelamento'] >= '2025-01-01'),
+        (embarca['Data do Cancelamento'] >= '2024-10-01'),
 
         ## cancelamentos com forma de pagamento pix realizados no mês diferente ao da venda
         (
@@ -377,7 +377,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'PIX') &
         (embarca['Cancelamento_Mesmo_Mes'] == 0) &
-        (embarca['Data do Cancelamento'] >= '2025-01-01'),
+        (embarca['Data do Cancelamento'] >= '2024-10-01'),
 
         ## cancelamentos com forma de pagamento credit_card realizados no mês diferente ao da venda
         (
@@ -386,13 +386,13 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         ) &
         (embarca['Metodo de Pagamento_V'] == 'CREDIT_CARD') &
         (embarca['Cancelamento_Mesmo_Mes'] == 0) & 
-        (embarca['Data do Cancelamento'] >= '2025-01-01')
+        (embarca['Data do Cancelamento'] >= '2024-10-01')
         
     ]
 
     resultado_projecao = [
     
-        ## ----- REGISTROS ANTES DE 01/01/2025 -----
+        ## ----- REGISTROS ANTES DE 01/10/2024 -----
         
         embarca['Data BPE'] + timedelta(days=1),
         embarca['Data BPE'] + (timedelta(days=30) * embarca['Parcela_Atual']) + timedelta(days=1),
@@ -401,7 +401,7 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
         embarca['Data do Cancelamento'] + timedelta(days=1),
         embarca['Data do Cancelamento'] + (timedelta(days=30) * embarca['Parcela_Atual']) + timedelta(days=1),
         
-        ## ----- REGISTROS DEPOIS DE 01/01/2025 -----
+        ## ----- REGISTROS DEPOIS DE 01/10/2024 -----
         
         embarca['Data BPE'] + timedelta(days=1),
         embarca['Data BPE'] + (timedelta(days=30) * embarca['Parcela Referente']) + timedelta(days=1),
