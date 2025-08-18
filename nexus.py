@@ -244,18 +244,5 @@ for periodo, df_grupo in grupo_por_mes_venda:
     except Exception as e:
         print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
 
-## salvando pela data do recebimento
-for periodo, df_grupo in grupo_por_mes_recebimento:
-
-    nome_arquivo_completo = f'{nome_base_arquivo_recebimento}_{periodo}.csv'
-
-    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_recebimento, nome_arquivo_completo)
-
-    try:
-        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
-        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
-    except Exception as e:
-        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
-
 print(f'SISTEMA: Encerrando sistema Nexus!')
 
