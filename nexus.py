@@ -23,8 +23,11 @@ caminho_totalbus = os.path.join(caminho_base, 'Totalbus')
 caminho_tx_conveniencia = os.path.join(caminho_base, 'Tabela Tx Conv.xlsx')
 caminho_relatorio_final_compra = os.path.join(caminho_base, 'Relatorio Final/Data de Lancamento')
 caminho_relatorio_final_projecao = os.path.join('Relatorio Final/Data de Projecao')
-caminho_relatorio_final_recebimento = os.path.join('Relatorio Final/Data de Recebimento')
 caminho_relatorio_final_resumo = os.path.join(caminho_base, 'Relatorio Final/Resumo de Valores')
+caminho_relatorio_final_cobranca_data_venda_total = os.path.join(caminho_base, 'Relatorio Final/Relatorios de Cobranca/Data da Venda/Total')
+caminho_relatorio_final_cobranca_data_projecao_total = os.path.join(caminho_base, 'Relatorio Final/Relatorios de Cobranca/Data de Projecao/Total')
+caminho_relatorio_final_cobranca_data_venda_periodo = os.path.join(caminho_base, 'Relatorio Final/Relatorios de Cobranca/Data da Venda/Periodo')
+caminho_relatorio_final_cobranca_data_projecao_periodo = os.path.join(caminho_base, 'Relatorio Final/Relatorios de Cobranca/Data de Projecao/Periodo')
 
 ## ----- CARREGANDO TX DE CONVENIÊNCIA -----
 
@@ -35,22 +38,18 @@ except Exception as e:
 
 ## ----- PROCESSAMENTO DAS VENDAS E CANCELAMENTO -----
 
-df_totalbus = processamento_totalbus(caminho_totalbus)
-df_embarca_vendas = processamento_embarca_vendas(caminho_embarca_vendas)
+df_totalbus, diferencas = processamento_totalbus(caminho_totalbus)
+df_embarca_vendas, diferencas_embarca_v = processamento_embarca_vendas(caminho_embarca_vendas)
 
-## ----- AGRUPANDO TABELAS DO TOTALBUS COM A TAXA DE CONVENIÊNCIA -----
+## ----- APONTANDO DIFERENÇAS -----
 
-df_totalbus = agrupamento_merge(
-    df_totalbus,
-    df_taxa_conveniencia,
-    'DATA HORA VENDA',
-    'Data',
-    'left',
-    'Data'
-)
+if diferencas.shape[0] != 0:
+    print('\nSISTEMA: Há registros do TOTALBUS sem dados em algumas colunas:')
+    print(diferencas.to_string())
 
-df_totalbus['% Tx Conv'] = df_totalbus['% Tx Conv'] / 100
-df_totalbus['VALOR MULTA'] = df_totalbus['VALOR MULTA'].fillna(0)
+if diferencas_embarca_v.shape[0] != 0:
+    print('\nSISTEMA: Há registros do EMBARCA VENDAS sem dados em algumas colunas:')
+    print(diferencas_embarca_v.to_string())
 
 ## ----- TRATANDO DADOS -----
 
@@ -62,6 +61,20 @@ temp_series = df_totalbus.apply(
 )
 
 df_totalbus['DATA HORA VENDA PARA CANC.'] = df_totalbus['DATA HORA VENDA PARA CANC.'].fillna(temp_series)
+
+## ----- AGRUPANDO TABELAS DO TOTALBUS COM A TAXA DE CONVENIÊNCIA -----
+
+df_totalbus = agrupamento_merge(
+    df_totalbus,
+    df_taxa_conveniencia,
+    'DATA HORA VENDA PARA CANC.',
+    'Data',
+    'left',
+    'Data'
+)
+
+df_totalbus['% Tx Conv'] = df_totalbus['% Tx Conv'] / 100
+df_totalbus['VALOR MULTA'] = df_totalbus['VALOR MULTA'].fillna(0)
 
 ## ----- AGRUPANDO TABELAS DO TOTALBUS COM EMBARCA VENDAS -----
 
@@ -208,25 +221,42 @@ nome_base_arquivo_venda = 'conciliacao_geral-v'
 nome_base_arquivo_proj = 'conciliacao_geral-p'
 nome_base_arquivo_recebimento = 'conciliacao_geral-r'
 nome_base_arquivo_resumo = 'resumo_projecao'
+nome_base_arquivo_cobranca_venda_total = 'conciliacao_geral-cobranca-v_total'
+nome_base_arquivo_cobranca_projecao_total = 'conciliacao_geral-cobranca-p_total'
+nome_base_arquivo_cobranca_venda_periodo = 'conciliacao_geral-cobranca-v_periodo'
+nome_base_arquivo_cobranca_projecao_periodo = 'conciliacao_geral-cobranca-p_periodo'
+
+## filtrando os dataframes com saldo != 0,00 para cobrar o cliente
+df_cobranca_total = df_agrupado[
+    (df_agrupado['Saldo'].abs() >= 0.01) &
+    (df_agrupado['Saldo_Total'].abs() >= 0.01)
+].copy()
+
+df_cobranca_periodo = df_agrupado[
+    (df_agrupado['Saldo'].abs() >= 0.01)
+].copy()
 
 ## agrupando os DataFrames pela DATA PROJECAO e DATA DA COMPRA
 grupo_por_mes_projecao = df_agrupado.groupby(df_agrupado['Data Projecao'].dt.to_period('M'))
 grupo_por_mes_venda = df_agrupado.groupby(df_agrupado['Data de Lancamento'].dt.to_period('M'))
-grupo_por_mes_recebimento = df_agrupado.groupby(pd.to_datetime(df_agrupado['Data de Recebimento']).dt.to_period('M'))
+grupo_por_mes_projecao_cobranca_total = df_cobranca_total.groupby(df_cobranca_total['Data Projecao'].dt.to_period('M'))
+grupo_por_mes_venda_cobranca_total = df_cobranca_total.groupby(df_cobranca_total['Data de Lancamento'].dt.to_period('M'))
+grupo_por_mes_projecao_cobranca_periodo = df_cobranca_periodo.groupby(df_cobranca_periodo['Data Projecao'].dt.to_period('M'))
+grupo_por_mes_venda_cobranca_periodo = df_cobranca_periodo.groupby(df_cobranca_periodo['Data de Lancamento'].dt.to_period('M'))
 
 ## salvando pela data projecao
-for periodo, df_grupo in grupo_por_mes_projecao:
-    ano_mes_str = periodo.strftime('%Y_%m')
-
-    nome_arquivo_completo = f'{nome_base_arquivo_proj}_{ano_mes_str}.csv'
-
-    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_projecao, nome_arquivo_completo)
-
-    try:
-        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
-        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
-    except Exception as e:
-        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
+#for periodo, df_grupo in grupo_por_mes_projecao:
+#    ano_mes_str = periodo.strftime('%Y_%m')
+#
+#    nome_arquivo_completo = f'{nome_base_arquivo_proj}_{ano_mes_str}.csv'
+#
+#    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_projecao, nome_arquivo_completo)
+#
+#    try:
+#        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
+#        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
+#    except Exception as e:
+#        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
 
 ## salvando pela data do lançamento
 for periodo, df_grupo in grupo_por_mes_venda:
@@ -236,6 +266,66 @@ for periodo, df_grupo in grupo_por_mes_venda:
 
     caminho_arquivo_completo = os.path.join(caminho_relatorio_final_compra, nome_arquivo_completo)
     caminho_resumo_completo = os.path.join(caminho_relatorio_final_resumo, nome_base_arquivo_resumo)
+
+    ## salvando relatórios
+    try:
+        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
+        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
+    except Exception as e:
+        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
+
+## salvando o dataframe de cobranca pela data do lançamento com diferença no saldo total
+for periodo, df_grupo in grupo_por_mes_venda_cobranca_total:
+    ano_mes_str = periodo.strftime('%Y_%m')
+
+    nome_arquivo_completo = f'{nome_base_arquivo_cobranca_venda_total}_{ano_mes_str}.csv'
+
+    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_cobranca_data_venda_total, nome_arquivo_completo)
+
+    ## salvando relatórios
+    try:
+        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
+        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
+    except Exception as e:
+        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
+
+## salvando o dataframe de cobranca pela data do lançamento com diferença apenas no saldo do período
+for periodo, df_grupo in grupo_por_mes_venda_cobranca_periodo:
+    ano_mes_str = periodo.strftime('%Y_%m')
+
+    nome_arquivo_completo = f'{nome_base_arquivo_cobranca_venda_periodo}_{ano_mes_str}.csv'
+
+    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_cobranca_data_venda_periodo, nome_arquivo_completo)
+
+    ## salvando relatórios
+    try:
+        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
+        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
+    except Exception as e:
+        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
+
+## salvando o dataframe de cobranca pela data de projecao com diferença no saldo total
+for periodo, df_grupo in grupo_por_mes_projecao_cobranca_total:
+    ano_mes_str = periodo.strftime('%Y_%m')
+
+    nome_arquivo_completo = f'{nome_base_arquivo_cobranca_projecao_total}_{ano_mes_str}.csv'
+
+    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_cobranca_data_projecao_total, nome_arquivo_completo)
+
+    ## salvando relatórios
+    try:
+        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
+        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
+    except Exception as e:
+        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
+
+## salvando o dataframe de cobranca pela data de projecao com diferença apenas no saldo do período
+for periodo, df_grupo in grupo_por_mes_projecao_cobranca_periodo:
+    ano_mes_str = periodo.strftime('%Y_%m')
+
+    nome_arquivo_completo = f'{nome_base_arquivo_cobranca_projecao_periodo}_{ano_mes_str}.csv'
+
+    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_cobranca_data_projecao_periodo, nome_arquivo_completo)
 
     ## salvando relatórios
     try:
