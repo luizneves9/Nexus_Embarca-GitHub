@@ -5,7 +5,35 @@ from datetime import datetime
 import numpy as np
 from funcoes import ler_arquivo
 
+## ----- LOCALIZANDO INCONSISTÊNCIAS NO RELATÓRIO DO TOTALBUS -----
+
+def apontamento_incosistencias(df_totalbus):
+
+    df_totalbus_diferencas_c = df_totalbus[
+        (df_totalbus['STATUS BILHETE'] == 'C') &
+        (
+            (df_totalbus['AGENCIA ORIGINAL'].isna()) | 
+            (df_totalbus['DATA HORA VENDA PARA CANC.'].isna())
+        )
+    ][['Origem', 'EMPRESA', 'NUMERO BILHETE', 'DATA HORA VENDA', 'STATUS BILHETE', 'TOTAL DO BILHETE', 'AGENCIA ORIGINAL', 'ID TRANSACAO ORIGINAL', 'DATA HORA VENDA PARA CANC.', 'AGENCIA EMISSORA']]
+
+    df_totalbus_vendas = df_totalbus[df_totalbus['STATUS BILHETE'] == 'V'][['EMPRESA', 'NUMERO BILHETE', 'DATA HORA VENDA', 'AGENCIA ORIGINAL', 'ID TRANSACAO ORIGINAL']].rename(columns={'EMPRESA': 'EMPRESA_v', 'NUMERO BILHETE': 'NUMERO BILHETE_v', 'DATA HORA VENDA': 'DATA HORA VENDA_v', 'AGENCIA ORIGINAL': 'AGENCIA ORIGINAL_v', 'ID TRANSACAO ORIGINAL': 'ID TRANSACAO ORIGINAL_v'})
+
+    df_apontamento = pd.merge(
+        df_totalbus_diferencas_c,
+        df_totalbus_vendas,
+        left_on=['EMPRESA', 'NUMERO BILHETE', 'AGENCIA EMISSORA'],
+        right_on=['EMPRESA_v', 'NUMERO BILHETE_v', 'AGENCIA ORIGINAL_v'],
+        how='left'
+    )
+
+    df_apontamento['ID TRANSACAO ORIGINAL'] = df_apontamento['ID TRANSACAO ORIGINAL'].astype(str)
+    df_apontamento['ID TRANSACAO ORIGINAL_v'] = df_apontamento['ID TRANSACAO ORIGINAL_v'].astype(str)
+
+    return df_apontamento
+
 ## ----- PROCESSAMENTO DAS VENDAS -----
+
 def processamento_totalbus(caminho_totalbus):
 
     '''
@@ -23,7 +51,7 @@ def processamento_totalbus(caminho_totalbus):
     ## definindo colunas
     colunas = ['EMPRESA', 'NUMERO BILHETE', 'DATA HORA VENDA', 'STATUS BILHETE', 'TARIFA', 'PEDAGIO', 'TAXA_EMB',
                         'TOTAL DO BILHETE', 'FORMA PAGAMENTO 1', 'AGENCIA ORIGINAL', 'ID TRANSACAO ORIGINAL', 'NOME PASSAGEIRO',
-                        'VALOR MULTA', 'DATA HORA VIAGEM', 'DATA HORA VENDA PARA CANC.']
+                        'VALOR MULTA', 'DATA HORA VIAGEM', 'DATA HORA VENDA PARA CANC.', 'AGENCIA EMISSORA']
 
     ## criando uma lista vazia para armazenamento
     lista_totalbus = []
@@ -90,4 +118,6 @@ def processamento_totalbus(caminho_totalbus):
     for c in colunas_negativar:
         df_totalbus.loc[condicional_negativar, c] = -df_totalbus.loc[condicional_negativar, c]
 
-    return df_totalbus
+    diferencas = apontamento_incosistencias(df_totalbus)
+
+    return df_totalbus, diferencas
