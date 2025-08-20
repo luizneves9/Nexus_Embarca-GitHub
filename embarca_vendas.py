@@ -5,6 +5,20 @@ import os
 from datetime import datetime
 from funcoes import ler_arquivo
 
+## ----- LOCALIZANDO INCONSISTÊNCIAS NO RELATÓRIO DE VENDAS DA EMBARCA -----
+
+def apontamento_inconsistencias(df_embarca_vendas):
+
+    df_diferencas = df_embarca_vendas[
+        (df_embarca_vendas['Operadora'].isna()) |
+        (df_embarca_vendas['ID do Bilhete'].isna()) |
+        (df_embarca_vendas['Metodo de pagamento'].isna()) |
+        (df_embarca_vendas['parcelas'].isna()) |
+        (df_embarca_vendas['Data da Compra'].isna())
+    ].copy()
+
+    return df_diferencas
+
 ## ----- PROCESSAMENTO DAS VENDAS -----
 
 def processamento_embarca_vendas(caminho_embarca_vendas):
@@ -56,8 +70,11 @@ def processamento_embarca_vendas(caminho_embarca_vendas):
     df_embarca_vendas['Data da Compra'] = pd.to_datetime(df_embarca_vendas['Data da Compra'], errors='coerce').dt.floor('D')
 
     ## tratando colunas
-    df_embarca_vendas['ID do Bilhete'] = df_embarca_vendas['ID do Bilhete'].astype(str).str.split('.').str[0]
+    df_embarca_vendas['ID do Bilhete'] = df_embarca_vendas['ID do Bilhete'].astype(str).str.split('.').str[0].replace('nan', None)
+
+    ## identificando informações faltantes
+    diferencas = apontamento_inconsistencias(df_embarca_vendas)
 
     del df_embarca_vendas['Origem']
 
-    return df_embarca_vendas
+    return df_embarca_vendas, diferencas
