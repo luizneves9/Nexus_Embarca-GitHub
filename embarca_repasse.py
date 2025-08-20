@@ -119,9 +119,9 @@ def pre_processamento_embarca(df):
 
     ## incluindo colunas
     df['Data de Recebimento'] = df['Origem'].str[:4] + '-' + df['Origem'].str[4:6] + '-01'
-    df['Parcela_Atual'] = df['parcelas pagas'].astype(str).str.split('/').str[0]
-    df['Nº do Sistema'] = df['Nº do Sistema'].astype(str).str.split('.').str[0]
-    df['ID Transacao'] = df['ID Transacao'].astype(str).str.split('.').str[0]
+    df['Parcela_Atual'] = df['parcelas pagas'].astype(str).str.split('/').str[0].replace('nan', None)
+    df['Nº do Sistema'] = df['Nº do Sistema'].astype(str).str.split('.').str[0].replace('nan', None)
+    df['ID Transacao'] = df['ID Transacao'].astype(str).str.split('.').str[0].replace('nan', None)
 
     df['MesAno_Venda'] = df['Data da Compra'].dt.strftime('%Y-%m')
     df['MesAno_Cancelado'] = df['Data do Cancelamento'].dt.strftime('%Y-%m')
@@ -168,16 +168,19 @@ def mesclagem_totalbus(df_embarca, df_totalbus):
     df_embarca = df_embarca.sort_values(by='Data da Compra')
 
     ## realizando o agrupamento pelo merge_asoft (permite tolerância entre datas)
-    df_agrupado = pd.merge_asof(
-        df_embarca,
-        df_totalbus_conciliador,
-        left_on= 'Data da Compra',
-        right_on= 'Data BPE',
-        left_by= ['Nome da Empresa', 'ID Transacao'],
-        right_by= ['NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'],
-        direction= 'nearest',
-        tolerance= pd.Timedelta('1 day')
-    )
+    try:
+        df_agrupado = pd.merge_asof(
+            df_embarca,
+            df_totalbus_conciliador,
+            left_on= 'Data da Compra',
+            right_on= 'Data BPE',
+            left_by= ['Nome da Empresa', 'ID Transacao'],
+            right_by= ['NOME_EMPRESA', 'ID TRANSACAO ORIGINAL'],
+            direction= 'nearest',
+            tolerance= pd.Timedelta('1 day')
+        )
+    except ValueError as e:
+        print(f'SISTEMA: Erro de mesclagem, verifique os dados. Erro: {e}')
 
     ## tratamento final coluna Data BPE (dados vazios) 
     df_agrupado['Data BPE'] = df_agrupado['Data BPE'].fillna(df_agrupado['Data da Compra'])
@@ -217,7 +220,7 @@ def projecao_data_pagamento(df):
 
     ## ----- PROJETANDO A DATA DE PAGAMENTO -----
 
-    data_base = pd.to_datetime('2024-10-01')
+    data_base = '2024-10-01'
 
     ## inclusão da condição, critério e resultado, através do np.select
     condicional_projecao_pos_data_base = [
@@ -270,8 +273,8 @@ def projecao_data_pagamento(df):
     df['Data_Projecao'] = pd.to_datetime(df['Data_Projecao']).dt.normalize()
 
     ## ajustando data útil
-    data_sabado = df['Data_Projecao'] == 5
-    data_domingo = df['Data_Projecao'] == 6
+    data_sabado = df['Data_Projecao'].dt.dayofweek == 5
+    data_domingo = df['Data_Projecao'].dt.dayofweek == 6
 
     df.loc[data_sabado, 'Data_Projecao'] += timedelta(days=2)
     df.loc[data_domingo, 'Data_Projecao'] += timedelta(days=1)
@@ -367,6 +370,26 @@ def ajuste_tipo(df):
 
     return df.astype(tipos_colunas)
 
+## ----- IDENTIFICANDO E APONTANDO INCONSISTÊNCIAS DA EMBARCA_REPASSE -----
+
+def apontamento_inconsistencias(df_embarca_repasse):
+
+    df_apontamentos = df_embarca_repasse[
+        (df_embarca_repasse['Operadora'].isna()) |
+        (df_embarca_repasse['ID do Bilhete'].isna()) |
+        (df_embarca_repasse['Forma de pagamento'].isna()) |
+        (df_embarca_repasse['Canal'].isna()) |
+        (df_embarca_repasse['Status'].isna()) |
+        (df_embarca_repasse['Data da Compra'].isna()) |
+        (
+            (df_embarca_repasse['Status'] != 'Aprovado') &
+            (df_embarca_repasse['Data do Cancelamento'].isna())
+        ) |
+        (df_embarca_repasse['parcelas pagas'].isna())
+    ]
+
+    return df_apontamentos
+
 ## ----- PROCESSANDO OS REPASSES DA EMBARCA -----
 
 def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_totalbus):
@@ -395,6 +418,13 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     
     ## carregando todos os arquivos em um data frame
     embarca = consolidar_arquivos_repasses(diretorio_embarca_repasse, colunas_embarca)
+
+    ## ----- IDENTIFICANDO E APONTANDO INFORMAÇÕES FALTANTES NOS RELATÓRIOS -----
+
+    df_apontamentos = apontamento_inconsistencias(embarca)
+    if df_apontamentos.empty:
+        df_vazio = pd.DataFrame()
+        return df_vazio, df_apontamentos
 
     ## ----- TRATANDO AS PRIMEIRAS COLUNAS DO RELATÓRIO -----
 
@@ -434,16 +464,19 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     df_embarca_vendas2 = df_embarca_vendas2.sort_values('Data da Venda')
 
     ## agrupando as duas planilhas (embarca repasses e embarca vendas) pelo merge_asoft
-    embarca = pd.merge_asof(
-        embarca,
-        df_embarca_vendas2,
-        left_on= 'Data da Compra',
-        right_on= 'Data da Venda',
-        left_by= ['Nome da Empresa', 'ID Transacao'],
-        right_by= ['Nome da Empresa', 'ID Transacao'],
-        direction= 'nearest',
-        tolerance= pd.Timedelta('1 day')
-    )
+    try:
+        embarca = pd.merge_asof(
+            embarca,
+            df_embarca_vendas2,
+            left_on= 'Data da Compra',
+            right_on= 'Data da Venda',
+            left_by= ['Nome da Empresa', 'ID Transacao'],
+            right_by= ['Nome da Empresa', 'ID Transacao'],
+            direction= 'nearest',
+            tolerance= pd.Timedelta('1 day')
+        )
+    except ValueError as e:
+        print(f'SISTEMA: Erro de mesclagem, verifique os dados. Erro: {e}')
 
     ## tratando dados
     embarca['Metodo de Pagamento_V'] = embarca['Metodo de Pagamento_V'].fillna(embarca['Forma de pagamento'])
@@ -503,4 +536,4 @@ def processamento_repasses(diretorio_embarca_repasse, df_embarca_vendas, df_tota
     for col in colunas_data:
         embarca[col] = pd.to_datetime(embarca[col], errors='coerce').dt.normalize()
 
-    return embarca
+    return embarca, df_apontamentos
