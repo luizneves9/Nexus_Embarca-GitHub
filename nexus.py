@@ -1,6 +1,7 @@
 ## ----- IMPORTANDO BIBLIOTECAS -----
 
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from totalbus import processamento_totalbus
 from embarca_vendas import processamento_embarca_vendas
@@ -117,7 +118,14 @@ df_projecao = processando_projecao(df_totalbus)
 
 ## ----- CARREGANDO REPASSES DA EMBARCA -----
 
-df_embarca = processamento_repasses(caminho_embarca_repasse, df_embarca_vendas, df_totalbus)
+df_embarca, diferencas_embarca_r = processamento_repasses(caminho_embarca_repasse, df_embarca_vendas, df_totalbus)
+
+## ----- APONTANDO DIFERENÇAS DO RELATÓRIO DE REPASSES DA EMBARCA -----
+
+if diferencas_embarca_r.shape[0] != 0:
+    diferencas_embarca_r = diferencas_embarca_r[['Operadora', 'ID do Bilhete', 'Forma de pagamento', 'Canal', 'Status', 'Data da Compra', 'Data do Cancelamento', 'parcelas pagas', 'Origem']]
+    print('\nSISTEMA: Há registros do TOTALBUS sem dados em algumas colunas:')
+    print(diferencas_embarca_r.to_string())
 
 ## ----- RENOMEANDO E AGRUPANDO TOTALBUS E EMBARCA -----
 
@@ -220,7 +228,6 @@ df_agrupado = pd.merge(df_agrupado, saldo_total, how='left', on=['Nome da Empres
 nome_base_arquivo_venda = 'conciliacao_geral-v'
 nome_base_arquivo_proj = 'conciliacao_geral-p'
 nome_base_arquivo_recebimento = 'conciliacao_geral-r'
-nome_base_arquivo_resumo = 'resumo_projecao'
 nome_base_arquivo_cobranca_venda_total = 'conciliacao_geral-cobranca-v_total'
 nome_base_arquivo_cobranca_projecao_total = 'conciliacao_geral-cobranca-p_total'
 nome_base_arquivo_cobranca_venda_periodo = 'conciliacao_geral-cobranca-v_periodo'
@@ -244,20 +251,6 @@ grupo_por_mes_venda_cobranca_total = df_cobranca_total.groupby(df_cobranca_total
 grupo_por_mes_projecao_cobranca_periodo = df_cobranca_periodo.groupby(df_cobranca_periodo['Data Projecao'].dt.to_period('M'))
 grupo_por_mes_venda_cobranca_periodo = df_cobranca_periodo.groupby(df_cobranca_periodo['Data de Lancamento'].dt.to_period('M'))
 
-## salvando pela data projecao
-#for periodo, df_grupo in grupo_por_mes_projecao:
-#    ano_mes_str = periodo.strftime('%Y_%m')
-#
-#    nome_arquivo_completo = f'{nome_base_arquivo_proj}_{ano_mes_str}.csv'
-#
-#    caminho_arquivo_completo = os.path.join(caminho_relatorio_final_projecao, nome_arquivo_completo)
-#
-#    try:
-#        df_grupo.to_csv(caminho_arquivo_completo, sep=';', decimal=',', index=False)
-#        print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
-#    except Exception as e:
-#        print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
-
 ## salvando pela data do lançamento
 for periodo, df_grupo in grupo_por_mes_venda:
     ano_mes_str = periodo.strftime('%Y_%m')
@@ -265,7 +258,6 @@ for periodo, df_grupo in grupo_por_mes_venda:
     nome_arquivo_completo = f'{nome_base_arquivo_venda}_{ano_mes_str}.csv'
 
     caminho_arquivo_completo = os.path.join(caminho_relatorio_final_compra, nome_arquivo_completo)
-    caminho_resumo_completo = os.path.join(caminho_relatorio_final_resumo, nome_base_arquivo_resumo)
 
     ## salvando relatórios
     try:
@@ -333,6 +325,68 @@ for periodo, df_grupo in grupo_por_mes_projecao_cobranca_periodo:
         print(f'SISTEMA: Salvo {len(df_grupo)} registros para {nome_arquivo_completo}')
     except Exception as e:
         print(f'AVISO: Erro ao salvar o arquivo {nome_arquivo_completo}: {e}')
+
+## salvando o dataframe de resumo de empresa + data projecao + valores + intrução de implantação
+
+## filtrando os do df agrupado e criando uma cópia
+df_resumo = df_agrupado[['Base', 'Nome da Empresa', 'Data de Lancamento', 'Parcela Atual', 'Data Projecao', 'Total do Bilhete_Parcela', 'Taxa de Conv._Parcela', 'Comissao_Parcela', 'Multa', 'Total do Repasse_Parcela']]
+
+df_resumo = df_resumo[df_resumo['Base'] == 'Totalbus']
+
+## zerando os valores de multa das parcelas que não são a primeira
+condicional = df_resumo['Parcela Atual'] != 1
+df_resumo.loc[condicional, 'Multa'] = 0
+
+## ajustando a data para mes/ano
+df_resumo['Data de Lancamento'] = df_resumo['Data de Lancamento'].dt.to_period('M')
+df_resumo['Data Projecao'] = df_resumo['Data Projecao'].dt.to_period('M')
+
+## agrupando os relatórios por empresa e data de lancamento
+df_agrupado_teste = df_resumo.groupby(['Nome da Empresa', 'Data de Lancamento'])
+
+## renomeando colunas
+df_resumo.rename(columns={
+    'Data Projecao': 'Data de Vencimento',
+    'Total do Bilhete_Parcela': 'Total do Bilhete',
+    'Taxa de Conv._Parcela': 'Tx de Conv.',
+    'Comissao_Parcela': 'Comissao',
+    'Total do Repasse_Parcela': 'Repasse'
+}, inplace=True)
+
+## looping em cada data frame
+for (empresa, periodo), grupo in df_agrupado_teste:
+
+    ## definindo o nome do arquivo
+    nome_arquivo = f'{empresa}_{periodo}.csv'
+
+    ## definindo as colunas de valores para somar
+    colunas_soma = ['Total do Bilhete', 'Tx de Conv.', 'Comissao',
+       'Multa', 'Repasse']
+
+    ## agrupando por data projecao e somando os valores
+    df_somado = grupo.groupby('Data de Vencimento')[colunas_soma].sum().reset_index()
+
+    ## somando valores
+    total_faturamento = df_somado['Total do Bilhete'].sum() + df_somado['Multa'].sum()
+    total_taxa_conv = df_somado['Tx de Conv.'].sum()
+    total_comissao = df_somado['Comissao'].sum()
+    total_repasse = df_somado['Repasse'].sum()
+
+    ## incluindo linhas
+    df_instrucao = pd.DataFrame([
+        {'Data de Vencimento': np.nan, 'Total do Bilhete': np.nan, 'Tx de Conv.': np.nan, 'Comissao': np.nan, 'Multa': np.nan, 'Repasse': np.nan},
+        {'Data de Vencimento': 'Implantação do faturamento (213/135):', 'Total do Bilhete': total_faturamento, 'Tx de Conv.': np.nan, 'Comissao': np.nan, 'Multa': np.nan, 'Repasse': np.nan},
+        {'Data de Vencimento': 'Implantação da taxa de conv. (213/205):', 'Total do Bilhete': total_taxa_conv, 'Tx de Conv.': np.nan, 'Comissao': np.nan, 'Multa': np.nan, 'Repasse': np.nan},
+        {'Data de Vencimento': 'Agrupar os dois títulos em um único (911107)', 'Total do Bilhete': np.nan, 'Tx de Conv.': np.nan, 'Comissao': np.nan, 'Multa': np.nan, 'Repasse': np.nan},
+        {'Data de Vencimento': 'Divisão: 01 parcela da comissão:', 'Total do Bilhete': total_comissao, 'Tx de Conv.': np.nan, 'Comissao': np.nan, 'Multa': np.nan, 'Repasse': np.nan},
+        { 'Data de Vencimento': 'Divisão: Demais parcelas serão compostas pelos valores de repasses por mês:', 'Total do Bilhete': total_repasse, 'Tx de Conv.': np.nan, 'Comissao': np.nan, 'Multa': np.nan, 'Repasse': np.nan}
+    ])
+
+    df_somado = pd.concat([df_somado, df_instrucao])
+
+    ## salvando os arquivos
+    print(f'SISTEMA: Salvando o arquivo "{nome_arquivo}"')
+    df_somado.to_csv(f'H:/Downloads/{nome_arquivo}', sep=';', decimal=',', encoding='latin-1', index=False, float_format='%.2f')
 
 print(f'SISTEMA: Encerrando sistema Nexus!')
 
